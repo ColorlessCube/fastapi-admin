@@ -12,7 +12,7 @@
     <div class="language-switcher">
       <el-dropdown @command="handleLanguageChange">
         <div class="language-btn">
-          <el-icon><Globe /></el-icon>
+          <el-icon><Operation /></el-icon>
           <span>{{ currentLanguage.label }}</span>
           <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
         </div>

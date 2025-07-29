@@ -2,12 +2,12 @@
   <div class="admin-layout">
     <el-container>
       <!-- 侧边栏 -->
-      <el-aside width="280px">
-        <div class="logo">
+      <el-aside :width="sidebarWidth" class="sidebar-container">
+        <div class="logo" @click="toggleSidebar">
           <div class="logo-icon">
             <el-icon><Grid /></el-icon>
           </div>
-          <div class="logo-text">
+          <div class="logo-text" v-show="!sidebarCollapsed">
             <h3>FastAPI Admin</h3>
             <span>{{ $t('common.system') }}</span>
           </div>
@@ -15,6 +15,7 @@
         <el-menu
           :default-active="$route.path"
           :default-openeds="defaultOpeneds"
+          :collapse="sidebarCollapsed"
           router
           background-color="transparent"
           text-color="var(--sidebar-text)"
@@ -44,28 +45,14 @@
               <el-icon><Setting /></el-icon>
               <span>{{ $t('nav.systemConfigs') }}</span>
             </el-menu-item>
-          </el-sub-menu>
-
-          <!-- 示例：内容管理 - 二级菜单（可以根据需要添加更多分组） -->
-          <!--
-          <el-sub-menu index="content" v-if="canAccessContent">
-            <template #title>
-              <el-icon><Document /></el-icon>
-              <span>内容管理</span>
-            </template>
-            <el-menu-item index="/articles">
-              <el-icon><EditPen /></el-icon>
-              <span>文章管理</span>
-            </el-menu-item>
-            <el-menu-item index="/categories">
-              <el-icon><Folder /></el-icon>
-              <span>分类管理</span>
+            <el-menu-item index="/notification-clients" v-if="canAccessPage('notification-clients')">
+              <el-icon><Bell /></el-icon>
+              <span>{{ $t('nav.notificationClients') }}</span>
             </el-menu-item>
           </el-sub-menu>
-          -->
         </el-menu>
       </el-aside>
-      
+
       <!-- 主内容区 -->
       <el-container>
         <!-- 顶部导航 -->
@@ -99,7 +86,7 @@
                 </div>
                 <el-dropdown @command="handleLanguageChange" class="language-dropdown">
                   <div class="language-btn">
-                    <el-icon><Globe /></el-icon>
+                    <el-icon><Operation /></el-icon>
                     <span>{{ currentLanguage.label }}</span>
                     <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
                   </div>
@@ -144,7 +131,7 @@
             </div>
           </div>
         </el-header>
-        
+
         <!-- 主要内容 -->
         <el-main>
           <div class="page-content">
@@ -153,48 +140,16 @@
         </el-main>
       </el-container>
     </el-container>
-
-    <!-- 个人资料编辑对话框 -->
-    <el-dialog
-      :title="$t('nav.profile')"
-      v-model="profileDialogVisible"
-      width="500px"
-    >
-      <el-form
-        :model="profileFormData"
-        :label-width="currentLocale === 'zh-CN' ? '80px' : '120px'"
-      >
-        <el-form-item :label="$t('pages.users.username')">
-          <el-input v-model="profileFormData.username" disabled />
-        </el-form-item>
-        <el-form-item :label="$t('pages.users.email')">
-          <el-input v-model="profileFormData.email" />
-        </el-form-item>
-        <el-form-item :label="$t('pages.users.fullName')">
-          <el-input v-model="profileFormData.full_name" />
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="profileDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-          <el-button type="primary" @click="handleProfileSave">
-            {{ $t('common.save') }}
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { setLocale, getLocale, getSupportedLocales } from '../i18n'
 import { usePermissions } from '../utils/permissions'
-import api from '../api'
 
 export default {
   name: 'AdminLayout',
@@ -203,6 +158,10 @@ export default {
     const route = useRoute()
     const { t } = useI18n()
     const userInfo = ref(JSON.parse(localStorage.getItem('user') || '{}'))
+
+    // 侧边栏状态管理
+    const sidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === 'true')
+    const sidebarWidth = computed(() => sidebarCollapsed.value ? '100px' : '280px')
 
     // 权限管理
     const { hasPermission, canAccessPage, initPermissions } = usePermissions()
@@ -219,40 +178,6 @@ export default {
 
     // 默认展开的菜单
     const defaultOpeneds = ref(['system'])
-
-    // 菜单配置
-    const menuConfig = [
-      {
-        path: '/',
-        title: '仪表盘',
-        icon: 'House',
-        type: 'item'
-      },
-      {
-        key: 'system',
-        title: '系统管理',
-        icon: 'Setting',
-        type: 'submenu',
-        requiresAuth: true,
-        children: [
-          {
-            path: '/users',
-            title: '用户管理',
-            icon: 'User'
-          },
-          {
-            path: '/roles',
-            title: '角色管理',
-            icon: 'UserFilled'
-          },
-          {
-            path: '/permission-test',
-            title: '权限测试',
-            icon: 'Key'
-          }
-        ]
-      }
-    ]
 
     // 页面配置 - 使用国际化
     const pageTitle = computed(() => {
@@ -302,17 +227,11 @@ export default {
       }
     })
 
-    // 检查用户是否有访问用户管理的权限（保留兼容性）
-    const canAccessUsers = computed(() => {
-      return canAccessPage('users')
-    })
-    
-    const profileDialogVisible = ref(false)
-    const profileFormData = reactive({
-      username: '',
-      email: '',
-      full_name: ''
-    })
+    // 侧边栏切换功能
+    const toggleSidebar = () => {
+      sidebarCollapsed.value = !sidebarCollapsed.value
+      localStorage.setItem('sidebarCollapsed', sidebarCollapsed.value.toString())
+    }
 
     // 语言切换处理
     const handleLanguageChange = (locale) => {
@@ -343,47 +262,26 @@ export default {
       }
     }
 
-    const handleProfileSave = async () => {
-      try {
-        // 调用更新当前用户信息的 API
-        const response = await api.put('/users/me', {
-          email: profileFormData.email,
-          full_name: profileFormData.full_name
-        })
-
-        // 更新本地存储的用户信息
-        const updatedUser = { ...userInfo.value, ...response }
-        localStorage.setItem('user', JSON.stringify(updatedUser))
-        userInfo.value = updatedUser
-
-        ElMessage.success(t('messages.profileUpdateSuccess'))
-        profileDialogVisible.value = false
-      } catch (error) {
-        console.error('Update profile error:', error)
-        ElMessage.error(t('messages.profileUpdateFailed'))
-      }
-    }
-    
     return {
       userInfo,
       pageTitle,
       pageDescription,
       breadcrumbItems,
-      canAccessUsers,
       defaultOpeneds,
-      profileDialogVisible,
-      profileFormData,
       currentLocale,
       supportedLanguages,
       currentLanguage,
+      // 侧边栏相关
+      sidebarCollapsed,
+      sidebarWidth,
+      toggleSidebar,
       // 权限相关
       hasPermission,
       canAccessPage,
       hasSystemMenuAccess,
       permissionsLoaded,
       handleCommand,
-      handleLanguageChange,
-      handleProfileSave
+      handleLanguageChange
     }
   }
 }
@@ -399,11 +297,12 @@ export default {
   height: 100vh;
 }
 
-.admin-layout :deep(.el-aside) {
+.sidebar-container {
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-1);
   z-index: 100;
+  transition: width 0.3s ease;
 }
 
 .admin-layout :deep(.el-menu) {
@@ -471,22 +370,14 @@ export default {
   font-weight: 600;
 }
 
-/* 菜单滚动条样式 */
+/* 简化的滚动条样式 */
 .admin-layout :deep(.el-menu)::-webkit-scrollbar {
   width: 4px;
 }
 
-.admin-layout :deep(.el-menu)::-webkit-scrollbar-track {
-  background: #2b2f3a;
-}
-
 .admin-layout :deep(.el-menu)::-webkit-scrollbar-thumb {
-  background: #606266;
+  background: var(--border-basic-2);
   border-radius: 2px;
-}
-
-.admin-layout :deep(.el-menu)::-webkit-scrollbar-thumb:hover {
-  background: #909399;
 }
 
 .logo {
@@ -497,6 +388,12 @@ export default {
   background-color: var(--sidebar-bg);
   border-bottom: 1px solid var(--border-basic-1);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logo:hover {
+  background-color: var(--sidebar-item-hover);
 }
 
 .logo-icon {
@@ -510,6 +407,17 @@ export default {
   color: white;
   font-size: 20px;
   margin-right: 12px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.logo-icon:hover {
+  transform: scale(1.05);
+}
+
+.logo-text {
+  transition: opacity 0.3s ease;
+  overflow: hidden;
 }
 
 .logo-text h3 {
@@ -518,12 +426,14 @@ export default {
   font-weight: 700;
   color: var(--text-basic);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .logo-text span {
   font-size: 12px;
   color: var(--text-alternate);
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .el-header {
@@ -569,22 +479,14 @@ export default {
   min-height: calc(100vh - 60px);
 }
 
-/* 滚动条样式 */
+/* 简化的主内容滚动条样式 */
 .admin-layout :deep(.el-main)::-webkit-scrollbar {
   width: 6px;
 }
 
-.admin-layout :deep(.el-main)::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
 .admin-layout :deep(.el-main)::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: var(--border-basic-2);
   border-radius: 3px;
-}
-
-.admin-layout :deep(.el-main)::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
 }
 
 /* 新增的样式 */
@@ -830,10 +732,6 @@ export default {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .breadcrumb-container {
-    min-width: 200px;
-  }
-
   .breadcrumb-description {
     display: none;
   }
@@ -843,26 +741,32 @@ export default {
   }
 
   .user-info {
-    min-width: 150px;
+    min-width: 120px;
   }
 
-  .notification-btn {
+  .notification-btn,
+  .language-btn {
     width: 40px;
     height: 40px;
+  }
+
+  .language-btn span {
+    display: none;
   }
 }
 
 @media (max-width: 480px) {
-  .breadcrumb-container {
-    min-width: 150px;
-  }
-
-  .breadcrumb-item {
-    display: none;
-  }
-
+  .breadcrumb-item,
   .breadcrumb-separator {
     display: none;
+  }
+
+  .sidebar-container {
+    width: 100px !important;
+  }
+
+  .logo-text {
+    display: none !important;
   }
 }
 </style>

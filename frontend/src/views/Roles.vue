@@ -1,616 +1,568 @@
 <template>
   <AdminLayout>
-    <div class="roles-content">
-      <div class="page-header">
-        <div class="header-content">
-          <div class="header-info">
-            <h1>{{ $t('pages.roles.title') }}</h1>
-            <p>{{ $t('pages.roles.description') }}</p>
-          </div>
-          <div class="header-actions">
-            <el-button type="primary" size="large" @click="handleAdd">
-              <el-icon><Plus /></el-icon>
-              {{ $t('pages.roles.addRole') }}
-            </el-button>
-          </div>
-        </div>
-      </div>
-
-      <el-card class="table-card">
-        <template #header>
-          <div class="card-header">
-            <div class="card-title">
-              <el-icon><UserFilled /></el-icon>
-              <span>{{ $t('pages.roles.roleList') }}</span>
+    <AdminTable
+        :config="tableConfig"
+        :data="data"
+        :loading="loading"
+        :total="total"
+        :statistics="statistics"
+        :form-config="formConfig"
+        :show-form-dialog="dialogVisible"
+        :form-data="formData"
+        :form-loading="submitting"
+        :form-mode="formMode"
+        @search="handleSearch"
+        @page-change="handlePageChange"
+        @selection-change="handleSelectionChange"
+        @action="handleAction"
+        @refresh="handleRefresh"
+        @form-submit="handleFormSubmit"
+        @form-cancel="handleFormCancel"
+        @form-reset="handleFormReset"
+        @update:show-form-dialog="dialogVisible = $event"
+    >
+      <!-- 角色表单中的权限选择插槽 -->
+      <template #permissions>
+        <div class="role-permission-tree-container">
+          <div class="tree-header">
+            <div class="tree-actions">
+              <el-button
+                  size="small"
+                  type="primary"
+                  :icon="Plus"
+                  @click="expandAllInForm"
+              >
+                {{ $t('pages.roles.expandAll') }}
+              </el-button>
+              <el-button
+                  size="small"
+                  type="info"
+                  :icon="Minus"
+                  @click="collapseAllInForm"
+              >
+                {{ $t('pages.roles.collapseAll') }}
+              </el-button>
             </div>
           </div>
-        </template>
-        
-        <el-table
-          :data="roles"
-          v-loading="loading"
-          style="width: 100%"
-        >
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="name" :label="$t('pages.roles.roleName')" min-width="120" />
-          <el-table-column prop="description" :label="$t('pages.roles.roleDescription')" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="permissions" :label="$t('pages.roles.permissions')" min-width="140" align="center">
-            <template #default="scope">
-              <el-tag type="info" size="small">
-                {{ scope.row.permissions?.length || 0 }} {{ $t('pages.roles.permissionCount') }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="is_active" :label="$t('pages.users.status')" min-width="80" align="center">
-            <template #default="scope">
-              <el-tag :type="scope.row.is_active ? 'success' : 'danger'" size="small">
-                {{ scope.row.is_active ? $t('common.active') : $t('common.inactive') }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="created_at" :label="$t('pages.users.createdAt')" min-width="160" show-overflow-tooltip>
-            <template #default="scope">
-              <div class="datetime-display">
-                <div class="datetime-main">{{ formatDateTime(scope.row.created_at) }}</div>
-                <div class="datetime-relative">{{ formatRelativeTime(scope.row.created_at) }}</div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="updated_at" :label="$t('pages.users.updatedAt')" min-width="160" show-overflow-tooltip>
-            <template #default="scope">
-              <div class="datetime-display">
-                <div class="datetime-main">{{ formatDateTime(scope.row.updated_at) }}</div>
-                <div class="datetime-relative">{{ formatRelativeTime(scope.row.updated_at) }}</div>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column :label="$t('common.operation')" min-width="240" fixed="right">
-            <template #default="scope">
-              <el-button
-                type="primary"
-                size="small"
-                @click="handleEdit(scope.row)"
-                v-if="pagePermissions.update"
-              >
-                {{ $t('common.edit') }}
-              </el-button>
-              <el-button
-                type="warning"
-                size="small"
-                @click="handlePermissions(scope.row)"
-                v-if="pagePermissions.assignPermission"
-              >
-                {{ $t('pages.roles.permissions') }}
-              </el-button>
-              <el-button
-                type="danger"
-                size="small"
-                @click="handleDelete(scope.row)"
-                v-if="pagePermissions.delete"
-              >
-                {{ $t('common.delete') }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-    </div>
-    
-    <!-- 添加/编辑角色对话框 -->
-    <el-dialog
-      :title="dialogTitle"
-      v-model="dialogVisible"
-      width="500px"
-    >
-      <el-form
-        ref="roleForm"
-        :model="roleFormData"
-        :rules="roleFormRules"
-        :label-width="currentLocale === 'zh-CN' ? '80px' : '120px'"
-      >
-        <el-form-item :label="$t('pages.roles.roleName')" prop="name">
-          <el-input v-model="roleFormData.name" />
-        </el-form-item>
-        <el-form-item :label="$t('pages.roles.roleDescription')" prop="description">
-          <el-input
-            type="textarea"
-            :rows="3"
-            v-model="roleFormData.description"
-          />
-        </el-form-item>
-        <el-form-item :label="$t('pages.users.status')">
-          <el-switch v-model="roleFormData.is_active" />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button>
-          <el-button type="primary" @click="handleSubmit" :loading="submitting">
-            {{ $t('common.confirm') }}
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
-    
-    <!-- 权限分配对话框 -->
-    <el-dialog
-      :title="$t('pages.roles.assignPermissions')"
-      v-model="permissionDialogVisible"
-      width="800px"
-    >
-      <div class="permission-assignment">
-        <div class="permission-header">
-          <h4>{{ $t('pages.roles.assignPermissionsTo', { roleName: currentRole?.name }) }}</h4>
-          <p>{{ $t('pages.roles.selectPermissions') }}</p>
-        </div>
-        
-        <el-divider />
-        
-        <div class="permission-groups">
-          <div v-for="group in permissionGroups" :key="group.resource" class="permission-group">
-            <h5>{{ group.title }}</h5>
-            <el-checkbox-group v-model="selectedPermissions">
-              <el-checkbox
-                v-for="permission in group.permissions"
-                :key="permission.id"
-                :value="permission.id"
-              >
-                {{ permission.name }}
-                <span class="permission-desc">{{ permission.description }}</span>
-              </el-checkbox>
-            </el-checkbox-group>
+
+          <div class="permission-tree">
+            <el-tree
+                ref="roleFormPermissionTree"
+                :data="permissionTreeData"
+                :props="{ children: 'children', label: 'label' }"
+                show-checkbox
+                node-key="id"
+                :default-checked-keys="formData.permissions"
+                :default-expanded-keys="defaultExpandedKeys"
+                @check="handleFormPermissionCheck"
+                class="custom-tree"
+            />
           </div>
         </div>
-      </div>
-      
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="permissionDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-          <el-button type="primary" @click="handleSavePermissions" :loading="savingPermissions">
-            {{ $t('pages.roles.savePermissions') }}
-          </el-button>
-        </span>
       </template>
-    </el-dialog>
+    </AdminTable>
+
+
+
   </AdminLayout>
 </template>
-
 <script>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useI18n } from 'vue-i18n'
-import { getLocale } from '../i18n'
-import { formatDateTime, formatRelativeTime } from '../utils/datetime'
-import { usePermissions } from '../utils/permissions'
+import {ref, reactive, computed, onMounted} from 'vue'
+import {ElMessage} from 'element-plus'
+import {
+  Plus,
+  Minus
+} from '@element-plus/icons-vue'
 import AdminLayout from '../components/AdminLayout.vue'
+import AdminTable from '../components/AdminTable.vue'
+import FormDialog from '../components/FormDialog.vue'
+import {createRoleTableConfig} from '../config/tableConfigs.js'
+import {createRoleFormConfig, createDefaultFormData} from '../config/formConfigs.js'
+import {useAdminTable, createApiHandlers} from '../composables/useAdminTable.js'
+import {useI18n} from 'vue-i18n'
 import api from '../api'
 
 export default {
   name: 'Roles',
   components: {
-    AdminLayout
+    AdminLayout,
+    AdminTable,
+    FormDialog
   },
   setup() {
-    const { t } = useI18n()
-    const currentLocale = ref(getLocale())
-    const { getPagePermissions, initPermissions } = usePermissions()
-    const roles = ref([])
+    const {t} = useI18n()
 
-    // 页面权限 - 使用计算属性使其响应式
-    const pagePermissions = computed(() => getPagePermissions('roles'))
-    const permissions = ref([])
-    const loading = ref(false)
+    // 表格配置 - 使用计算属性响应语言变化
+    const tableConfig = computed(() => createRoleTableConfig(t))
+
+    // 表单对话框相关
     const dialogVisible = ref(false)
-    const permissionDialogVisible = ref(false)
-    const isEdit = ref(false)
+    const formMode = ref('add')
     const submitting = ref(false)
-    const savingPermissions = ref(false)
-    const roleForm = ref()
-    const currentRole = ref(null)
+
+    // 权限相关数据
+    const roleFormPermissionTree = ref(null) // 角色表单中的权限树
     const selectedPermissions = ref([])
-    
-    const roleFormData = reactive({
-      id: null,
-      name: '',
-      description: '',
-      is_active: true
+    const permissionTreeData = ref([])
+
+    // 表单配置
+    const formConfig = computed(() => createRoleFormConfig(t))
+
+    // 表单数据
+    const formData = reactive({
+      ...createDefaultFormData(createRoleFormConfig(t)),
+      permissions: [] // 添加权限字段
     })
-    
-    const roleFormRules = {
-      name: [
-        { required: true, message: t('validation.required'), trigger: 'blur' }
-      ]
+
+    // API处理器
+    const apiHandlers = createApiHandlers(api, '/roles')
+
+    // 使用通用表格组合函数
+    const {
+      loading,
+      data,
+      total,
+      statistics,
+      selectedRows,
+      handleSearch,
+      handlePageChange,
+      handleSelectionChange,
+      handleAction,
+      handleRefresh,
+      initialize
+    } = useAdminTable({
+      ...apiHandlers,
+      config: tableConfig,
+      onAdd: handleAdd,
+      onEdit: handleEdit
+    })
+
+    // 添加角色
+    async function handleAdd() {
+      formMode.value = 'add'
+      Object.assign(formData, {
+        ...createDefaultFormData(createRoleFormConfig(t)),
+        permissions: []
+      })
+      // 加载权限数据用于表单
+      await loadPermissions()
+      dialogVisible.value = true
     }
-    
-    const dialogTitle = ref('')
-    
-    // 权限分组
-    const permissionGroups = ref([])
-    
-    const loadRoles = async () => {
+
+    // 编辑角色
+    async function handleEdit(role) {
+      formMode.value = 'edit'
+
+      // 加载权限数据
+      await loadPermissions()
+
+      // 加载角色的权限
+      await loadRolePermissions(role.id)
+
+      Object.assign(formData, {
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        isActive: role.is_active,
+        permissions: selectedPermissions.value // 设置当前角色的权限
+      })
+
+      dialogVisible.value = true
+    }
+
+    // 删除角色
+    const handleDelete = async (role) => {
       try {
-        loading.value = true
-        roles.value = await api.get('/roles/')
+        await api.delete(`/roles/${role.id}`)
+        ElMessage.success(t('messages.deleteSuccess'))
+        await handleRefresh()
       } catch (error) {
-        console.error('Failed to load roles:', error)
-        ElMessage.error(t('messages.loadFailed'))
-      } finally {
-        loading.value = false
+        console.error('Failed to delete role:', error)
+        ElMessage.error(t('messages.deleteFailed'))
       }
     }
-    
+
+
+
+    // 加载权限树
     const loadPermissions = async () => {
       try {
-        permissions.value = await api.get('/permissions/')
-        groupPermissions()
+        const response = await api.get('/permissions/')
+        const permissions = response.data || response || []
+
+        // 构建权限树结构
+        const resourceMap = {}
+        permissions.forEach(permission => {
+          if (!resourceMap[permission.resource]) {
+            resourceMap[permission.resource] = {
+              id: permission.resource,
+              label: permission.resource,
+              children: []
+            }
+          }
+          resourceMap[permission.resource].children.push({
+            id: permission.id,
+            label: `${permission.name} (${permission.action})`,
+            description: permission.description
+          })
+        })
+
+        permissionTreeData.value = Object.values(resourceMap)
       } catch (error) {
         console.error('Failed to load permissions:', error)
         ElMessage.error(t('messages.loadFailed'))
       }
     }
-    
-    const groupPermissions = () => {
-      const groups = {}
-      permissions.value.forEach(permission => {
-        if (!groups[permission.resource]) {
-          groups[permission.resource] = {
-            resource: permission.resource,
-            title: getResourceTitle(permission.resource),
-            permissions: []
-          }
-        }
-        groups[permission.resource].permissions.push(permission)
-      })
-      permissionGroups.value = Object.values(groups)
-    }
-    
-    const getResourceTitle = (resource) => {
-      const titles = {
-        dashboard: t('nav.dashboard'),
-        user: t('nav.userManagement'),
-        role: t('nav.roleManagement'),
-        permission: t('pages.roles.permissions'),
-        system: t('nav.systemManagement'),
-        permission_test: t('pages.roles.permissions')
-      }
-      return titles[resource] || resource
-    }
 
-
-    
-    const handleAdd = () => {
-      isEdit.value = false
-      dialogTitle.value = t('pages.roles.addRole')
-      resetForm()
-      dialogVisible.value = true
-    }
-    
-    const handleEdit = (role) => {
-      isEdit.value = true
-      dialogTitle.value = t('pages.roles.editRole')
-      Object.assign(roleFormData, {
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        is_active: role.is_active
-      })
-      dialogVisible.value = true
-    }
-    
-    const handlePermissions = (role) => {
-      currentRole.value = role
-      selectedPermissions.value = role.permissions?.map(p => p.id) || []
-      permissionDialogVisible.value = true
-    }
-    
-    const handleDelete = async (role) => {
+    // 加载角色权限
+    const loadRolePermissions = async (roleId) => {
       try {
-        await ElMessageBox.confirm(
-          t('messages.deleteConfirm', { type: t('pages.roles.title'), name: role.name }),
-          t('common.warning'),
-          {
-            confirmButtonText: t('common.confirm'),
-            cancelButtonText: t('common.cancel'),
-            type: 'warning'
-          }
-        )
-
-        await api.delete(`/roles/${role.id}`)
-        ElMessage.success(t('messages.deleteSuccess'))
-        loadRoles()
+        const response = await api.get(`/roles/${roleId}/permissions`)
+        const permissions = response.data || response || []
+        selectedPermissions.value = permissions.map(p => p.id)
       } catch (error) {
-        if (error !== 'cancel') {
-          ElMessage.error(t('messages.deleteFailed'))
-        }
+        console.error('Failed to load role permissions:', error)
       }
     }
-    
-    const handleSubmit = async () => {
+
+
+
+    // 角色表单中的权限选择处理
+    const handleFormPermissionCheck = (data, checked) => {
+      if (roleFormPermissionTree.value) {
+        const checkedKeys = roleFormPermissionTree.value.getCheckedKeys()
+        // 只保存叶子节点（实际权限）的ID
+        formData.permissions = checkedKeys.filter(id => typeof id === 'number')
+      }
+    }
+
+    // 角色表单中展开所有节点
+    const expandAllInForm = () => {
+      if (roleFormPermissionTree.value) {
+        const allKeys = []
+        permissionTreeData.value.forEach(category => {
+          allKeys.push(category.id)
+          if (category.children) {
+            category.children.forEach(child => {
+              allKeys.push(child.id)
+            })
+          }
+        })
+        allKeys.forEach(key => {
+          const node = roleFormPermissionTree.value.getNode(key)
+          if (node) {
+            node.expand()
+          }
+        })
+      }
+    }
+
+    // 角色表单中折叠所有节点
+    const collapseAllInForm = () => {
+      if (roleFormPermissionTree.value) {
+        permissionTreeData.value.forEach(category => {
+          const node = roleFormPermissionTree.value.getNode(category.id)
+          if (node) {
+            node.collapse()
+          }
+        })
+      }
+    }
+
+    // 表单提交处理
+    const handleFormSubmit = async (submitData) => {
       try {
-        await roleForm.value.validate()
         submitting.value = true
-        
-        if (isEdit.value) {
-          await api.put(`/roles/${roleFormData.id}`, roleFormData)
+
+        // 转换字段名以匹配API
+        const roleData = {
+          name: submitData.name,
+          description: submitData.description,
+          is_active: submitData.isActive
+        }
+
+        if (formMode.value === 'edit') {
+          roleData.id = formData.id
+          await api.put(`/roles/${roleData.id}`, roleData)
+
+          // 更新权限
+          if (submitData.permissions !== undefined) {
+            await api.put(`/roles/${roleData.id}/permissions`, {
+              permission_ids: submitData.permissions
+            })
+          }
+
           ElMessage.success(t('messages.updateSuccess'))
         } else {
-          await api.post('/roles/', roleFormData)
+          // 创建角色
+          const response = await api.post('/roles/', roleData)
+          const newRole = response.data || response
+
+          // 如果有选择权限，则分配权限
+          if (submitData.permissions && submitData.permissions.length > 0) {
+            await api.put(`/roles/${newRole.id}/permissions`, {
+              permission_ids: submitData.permissions
+            })
+          }
+
           ElMessage.success(t('messages.createSuccess'))
         }
 
         dialogVisible.value = false
-        loadRoles()
+        await handleRefresh()
       } catch (error) {
-        console.error('Submit error:', error)
-        ElMessage.error(isEdit.value ? t('messages.updateFailed') : t('messages.createFailed'))
+        console.error('Failed to submit role:', error)
+        ElMessage.error(t('messages.submitFailed'))
       } finally {
         submitting.value = false
       }
     }
-    
-    const handleSavePermissions = async () => {
-      try {
-        savingPermissions.value = true
-        // 发送正确的数据格式
-        await api.put(`/roles/${currentRole.value.id}/permissions`, {
-          permission_ids: selectedPermissions.value
-        })
-        ElMessage.success(t('messages.permissionAssignSuccess'))
-        permissionDialogVisible.value = false
-        loadRoles()
-      } catch (error) {
-        console.error('Save permissions error:', error)
-        ElMessage.error(t('messages.permissionAssignFailed'))
-      } finally {
-        savingPermissions.value = false
-      }
+
+    // 表单取消处理
+    const handleFormCancel = () => {
+      dialogVisible.value = false
     }
-    
-    const resetForm = () => {
-      Object.assign(roleFormData, {
-        id: null,
-        name: '',
-        description: '',
-        is_active: true
+
+    // 表单重置处理
+    const handleFormReset = () => {
+      Object.assign(formData, {
+        ...createDefaultFormData(createRoleFormConfig(t)),
+        permissions: []
       })
     }
 
-    onMounted(async () => {
-      // 确保权限已初始化
-      await initPermissions()
-      loadRoles()
-      loadPermissions()
+
+
+
+    // 默认展开的节点
+    const defaultExpandedKeys = computed(() => {
+      return permissionTreeData.value.map(item => item.id)
     })
-    
+
+
+
+    // 初始化
+    onMounted(async () => {
+      await initialize()
+    })
+
     return {
-      roles,
-      permissions,
+      // 表格相关
+      tableConfig,
       loading,
+      data,
+      total,
+      statistics,
+      selectedRows,
+      handleSearch,
+      handlePageChange,
+      handleSelectionChange,
+      handleAction,
+      handleRefresh,
+
+      // 表单对话框相关
+      formConfig,
       dialogVisible,
-      permissionDialogVisible,
-      isEdit,
+      formMode,
+      formData,
       submitting,
-      savingPermissions,
-      roleForm,
-      currentRole,
+      handleFormSubmit,
+      handleFormCancel,
+      handleFormReset,
+
+      // 权限管理相关
+      roleFormPermissionTree,
       selectedPermissions,
-      roleFormData,
-      roleFormRules,
-      dialogTitle,
-      permissionGroups,
-      pagePermissions,
-      handleAdd,
-      handleEdit,
-      handlePermissions,
-      handleDelete,
-      handleSubmit,
-      handleSavePermissions,
-      formatDateTime,
-      formatRelativeTime
+      permissionTreeData,
+      defaultExpandedKeys,
+      handleFormPermissionCheck,
+      expandAllInForm,
+      collapseAllInForm,
+
+      // 图标
+      Plus,
+      Minus
     }
   }
 }
 </script>
 
 <style scoped>
-.roles-content {
-  background-color: transparent;
+
+/* 权限树容器 */
+.permission-tree-container {
+  background: var(--bg-basic-1);
+  border-radius: 12px;
+  border: 1px solid var(--border-basic-1);
+  margin: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  min-height: 400px;
 }
 
-.page-header {
-  background: linear-gradient(135deg, var(--success-color), var(--success-light));
-  border-radius: 16px;
-  padding: 32px;
-  margin-bottom: 24px;
-  color: white;
+/* 角色表单中的权限树容器 */
+.role-permission-tree-container {
+  background: var(--bg-basic-1);
+  border-radius: 12px;
+  border: 1px solid var(--border-basic-1);
+  margin: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  min-height: 300px;
 }
 
-.header-content {
+.tree-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: var(--bg-basic-2);
+  border-bottom: 1px solid var(--border-basic-1);
 }
 
-.header-info h1 {
-  margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.header-info p {
+.tree-header h4 {
   margin: 0;
   font-size: 16px;
-  opacity: 0.9;
-}
-
-.header-actions .el-button {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: white;
-  backdrop-filter: blur(10px);
-}
-
-.header-actions .el-button:hover {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.table-card {
-  border-radius: 16px;
-  box-shadow: var(--shadow-2);
-  border: 1px solid var(--border-basic-1);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  font-size: 18px;
   font-weight: 600;
   color: var(--text-basic);
 }
 
-.card-title .el-icon {
-  margin-right: 8px;
-  font-size: 20px;
-  color: var(--success-color);
+.tree-actions {
+  display: flex;
+  gap: 8px;
 }
 
-.permission-assignment {
-  max-height: 500px;
+.tree-actions .el-button {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* 权限树 */
+.permission-tree {
+  padding: 28px 32px 32px;
+  height: 350px;
   overflow-y: auto;
-  padding: 16px;
+  background: var(--bg-basic-1);
 }
 
-.permission-header h4 {
-  margin: 0 0 8px 0;
-  color: var(--text-basic);
-  font-size: 18px;
-  font-weight: 600;
+/* 自定义树样式 */
+:deep(.custom-tree .el-tree-node) {
+  margin-bottom: 4px;
 }
 
-.permission-header p {
-  margin: 0;
+:deep(.custom-tree .el-tree-node__content) {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+:deep(.custom-tree .el-tree-node__content:hover) {
+  background-color: var(--bg-basic-2);
+  border-color: var(--border-basic-2);
+}
+
+:deep(.custom-tree .el-tree-node__expand-icon) {
   color: var(--text-alternate);
   font-size: 14px;
 }
 
-.permission-groups {
-  padding: 16px 0;
-}
-
-.permission-group {
-  margin-bottom: 24px;
-  padding: 16px;
-  background-color: var(--bg-basic-2);
-  border-radius: 12px;
-  border: 1px solid var(--border-basic-1);
-}
-
-.permission-group h5 {
-  margin: 0 0 12px 0;
+:deep(.custom-tree .el-tree-node__expand-icon.expanded) {
   color: var(--primary-color);
-  font-size: 16px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
 }
 
-.permission-group h5::before {
-  content: '';
-  width: 4px;
-  height: 16px;
-  background-color: var(--primary-color);
-  border-radius: 2px;
-  margin-right: 8px;
+:deep(.custom-tree .el-checkbox) {
+  margin-right: 12px;
 }
 
-.permission-group .el-checkbox {
-  display: block;
-  margin: 8px 0;
-  line-height: 1.5;
-  padding: 8px 12px;
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.permission-group .el-checkbox:hover {
-  background-color: var(--bg-basic-1);
-}
-
-.permission-desc {
-  color: var(--text-alternate);
-  font-size: 12px;
-  margin-left: 8px;
-  opacity: 0.8;
-}
-
-/* 表格样式优化 */
-.roles-content :deep(.el-table) {
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.roles-content :deep(.el-table th.el-table__cell) {
-  background-color: var(--bg-basic-2);
-  color: var(--text-basic);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border-basic-1);
-}
-
-.roles-content :deep(.el-table td.el-table__cell) {
-  border-bottom: 1px solid var(--border-basic-1);
-}
-
-.roles-content :deep(.el-table__row:hover > td) {
-  background-color: var(--bg-basic-2) !important;
-}
-
-/* 对话框样式优化 */
-.roles-content :deep(.el-dialog) {
-  border-radius: 16px;
-  box-shadow: var(--shadow-3);
-}
-
-.roles-content :deep(.el-dialog__header) {
-  background-color: var(--bg-basic-1);
-  border-bottom: 1px solid var(--border-basic-1);
-  border-radius: 16px 16px 0 0;
-}
-
-/* 复选框样式优化 */
-.roles-content :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+:deep(.custom-tree .el-checkbox__input.is-checked .el-checkbox__inner) {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
 }
 
-.roles-content :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
-  color: var(--primary-color);
-  font-weight: 500;
+:deep(.custom-tree .el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-/* 时间显示样式 */
-.datetime-display {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.datetime-main {
-  font-size: 13px;
+:deep(.custom-tree .el-tree-node__label) {
+  font-size: 14px;
   color: var(--text-basic);
   font-weight: 500;
 }
 
-.datetime-relative {
-  font-size: 11px;
-  color: var(--text-alternate);
-  opacity: 0.8;
+/* 父级节点样式 */
+:deep(.custom-tree > .el-tree-node > .el-tree-node__content) {
+  background: linear-gradient(90deg, var(--bg-basic-2), var(--bg-basic-1));
+  border: 1px solid var(--border-basic-1);
+  font-weight: 600;
+}
+
+:deep(.custom-tree > .el-tree-node > .el-tree-node__content:hover) {
+  background: linear-gradient(90deg, var(--bg-basic-3), var(--bg-basic-2));
+  border-color: var(--primary-color);
+}
+
+:deep(.custom-tree > .el-tree-node > .el-tree-node__content .el-tree-node__label) {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* 子级节点样式 */
+:deep(.custom-tree .el-tree-node__children .el-tree-node__content) {
+  margin-left: 24px;
+  background: var(--bg-basic-1);
+}
+
+:deep(.custom-tree .el-tree-node__children .el-tree-node__content .el-tree-node__label) {
+  color: var(--text-control);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .tree-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .tree-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .tree-actions .el-button {
+    flex: 1;
+  }
+
+  .permission-tree {
+    padding: 24px 20px;
+  }
+}
+
+/* 滚动条样式 */
+.permission-tree::-webkit-scrollbar {
+  width: 6px;
+}
+
+.permission-tree::-webkit-scrollbar-track {
+  background: var(--bg-basic-3);
+  border-radius: 3px;
+}
+
+.permission-tree::-webkit-scrollbar-thumb {
+  background: var(--border-basic-3);
+  border-radius: 3px;
+}
+
+.permission-tree::-webkit-scrollbar-thumb:hover {
+  background: var(--border-basic-4);
 }
 </style>
+

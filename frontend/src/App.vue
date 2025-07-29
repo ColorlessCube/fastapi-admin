@@ -1,12 +1,31 @@
 <template>
   <div id="app">
-    <router-view />
+    <el-config-provider :locale="elementPlusLocale">
+      <router-view />
+    </el-config-provider>
   </div>
 </template>
 
 <script>
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import en from 'element-plus/dist/locale/en.mjs'
+
 export default {
-  name: 'App'
+  name: 'App',
+  setup() {
+    const { locale } = useI18n()
+
+    // 根据当前语言设置 Element Plus 语言包
+    const elementPlusLocale = computed(() => {
+      return locale.value === 'zh-CN' ? zhCn : en
+    })
+
+    return {
+      elementPlusLocale
+    }
+  }
 }
 </script>
 

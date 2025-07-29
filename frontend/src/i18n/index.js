@@ -33,7 +33,8 @@ function getDefaultLocale() {
 
 const messages = {
   'zh-CN': zhCN,
-  'en-US': enUS
+  'en-US': enUS,
+  'en': enUS  // 添加 'en' 作为 'en-US' 的别名，解决 Element Plus 语言包不匹配问题
 }
 
 const i18n = createI18n({

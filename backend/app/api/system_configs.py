@@ -1,5 +1,5 @@
-from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
@@ -10,18 +10,50 @@ from app.services.config_manager import config_manager
 router = APIRouter()
 
 
-@router.get("/", response_model=List[schemas.SystemConfig])
+@router.get("/")
 def read_system_configs(
     db: Session = Depends(deps.get_db),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = Query(None, description="搜索关键词（配置键、配置值）"),
+    data_type: Optional[str] = Query(None, description="数据类型筛选"),
+    is_active: Optional[bool] = Query(None, description="状态筛选"),
     current_user: User = Depends(deps.require_permission("system:config_read")),
 ) -> Any:
     """
-    获取系统配置列表
+    获取系统配置列表（支持搜索和筛选）
     """
-    configs = crud.crud_system_config.get_multi(db, skip=skip, limit=limit)
-    return configs
+    configs, total = crud.crud_system_config.get_multi_with_search(
+        db,
+        skip=skip,
+        limit=limit,
+        keyword=keyword,
+        data_type=data_type,
+        is_active=is_active
+    )
+
+    # 转换为字典格式以便序列化
+    configs_data = []
+    for config in configs:
+        config_dict = {
+            "id": config.id,
+            "key": config.key,
+            "value": config.value,
+            "description": config.description,
+            "data_type": config.data_type,
+            "is_active": config.is_active,
+            "is_system": config.is_system,
+            "created_at": config.created_at,
+            "updated_at": config.updated_at
+        }
+        configs_data.append(config_dict)
+
+    return {
+        "data": configs_data,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 @router.post("/", response_model=schemas.SystemConfig)
@@ -66,6 +98,18 @@ def update_system_config(
     
     config = crud.crud_system_config.update(db, db_obj=config, obj_in=config_in)
     return config
+
+
+@router.get("/statistics")
+def get_system_config_statistics(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.require_permission("system:config_read")),
+) -> Any:
+    """
+    获取系统配置统计信息
+    """
+    stats = crud.crud_system_config.get_statistics(db)
+    return stats
 
 
 @router.get("/{config_id}", response_model=schemas.SystemConfig)
@@ -167,3 +211,6 @@ async def refresh_config_manager(
     """
     await config_manager.refresh_configs()
     return {"message": "配置刷新成功", "last_refresh": config_manager.last_refresh}
+
+
+

@@ -1,9 +1,10 @@
 """
 用户 CRUD 操作
 """
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, Optional, Union, List, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 
 from app.core.security import get_password_hash, verify_password
 from app.crud.base import CRUDBase
@@ -122,6 +123,64 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         db.commit()
         db.refresh(user)
         return user
+
+    def get_multi_with_search(
+        self,
+        db: Session,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        keyword: Optional[str] = None,
+        role_id: Optional[int] = None,
+        is_active: Optional[bool] = None
+    ) -> Tuple[List[User], int]:
+        """
+        获取用户列表（支持搜索和筛选）
+        """
+        query = db.query(User)
+
+        # 关键词搜索
+        if keyword:
+            search_filter = or_(
+                User.username.ilike(f"%{keyword}%"),
+                User.email.ilike(f"%{keyword}%"),
+                User.full_name.ilike(f"%{keyword}%")
+            )
+            query = query.filter(search_filter)
+
+        # 角色筛选
+        if role_id is not None:
+            query = query.join(User.roles).filter(Role.id == role_id)
+
+        # 状态筛选
+        if is_active is not None:
+            query = query.filter(User.is_active == is_active)
+
+        # 获取总数
+        total = query.count()
+
+        # 分页
+        users = query.offset(skip).limit(limit).all()
+
+        return users, total
+
+    def get_statistics(self, db: Session) -> Dict[str, Any]:
+        """
+        获取用户统计信息
+        """
+        from app.models.role import Role
+
+        total = db.query(User).count()
+        active = db.query(User).filter(User.is_active == True).count()
+        inactive = total - active
+        roles = db.query(Role).count()
+
+        return {
+            "total": total,
+            "active": active,
+            "inactive": inactive,
+            "roles": roles
+        }
 
 
 user = CRUDUser(User)

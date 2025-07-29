@@ -1,5 +1,6 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
 from app.crud.base import CRUDBase
 from app.models.system_config import SystemConfig
 from app.schemas.system_config import SystemConfigCreate, SystemConfigUpdate
@@ -79,6 +80,69 @@ class CRUDSystemConfig(CRUDBase[SystemConfig, SystemConfigCreate, SystemConfigUp
             self.remove(db, id=id)
             return True
         return False
+
+    def get_multi_with_search(
+        self,
+        db: Session,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        keyword: Optional[str] = None,
+        data_type: Optional[str] = None,
+        is_active: Optional[bool] = None
+    ) -> Tuple[List[SystemConfig], int]:
+        """
+        获取系统配置列表（支持搜索和筛选）
+        """
+        query = db.query(SystemConfig)
+
+        # 关键词搜索
+        if keyword:
+            search_filter = or_(
+                SystemConfig.key.ilike(f"%{keyword}%"),
+                SystemConfig.value.ilike(f"%{keyword}%"),
+                SystemConfig.description.ilike(f"%{keyword}%")
+            )
+            query = query.filter(search_filter)
+
+        # 数据类型筛选
+        if data_type:
+            query = query.filter(SystemConfig.data_type == data_type)
+
+        # 状态筛选
+        if is_active is not None:
+            query = query.filter(SystemConfig.is_active == is_active)
+
+        # 获取总数
+        total = query.count()
+
+        # 分页
+        configs = query.offset(skip).limit(limit).all()
+
+        return configs, total
+
+    def get_statistics(self, db: Session) -> Dict[str, Any]:
+        """
+        获取系统配置统计信息
+        """
+        total = db.query(SystemConfig).count()
+        active = db.query(SystemConfig).filter(SystemConfig.is_active == True).count()
+        system = db.query(SystemConfig).filter(SystemConfig.is_system == True).count()
+
+        # 按数据类型统计
+        type_stats = db.query(
+            SystemConfig.data_type,
+            func.count(SystemConfig.id)
+        ).group_by(SystemConfig.data_type).all()
+
+        by_type = {data_type: count for data_type, count in type_stats}
+
+        return {
+            "total": total,
+            "active": active,
+            "system": system,
+            "by_type": by_type
+        }
 
 
 crud_system_config = CRUDSystemConfig(SystemConfig)

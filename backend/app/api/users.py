@@ -1,8 +1,8 @@
 """
 用户管理 API
 """
-from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -14,18 +14,49 @@ from app.schemas.user import User as UserSchema, UserCreate, UserUpdate, UserWit
 router = APIRouter()
 
 
-@router.get("/", response_model=List[UserWithRoles])
+@router.get("/")
 def read_users(
     db: Session = Depends(get_db),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = Query(None, description="搜索关键词（用户名、邮箱、姓名）"),
+    role_id: Optional[int] = Query(None, description="角色ID筛选"),
+    is_active: Optional[bool] = Query(None, description="状态筛选"),
     current_user: User = Depends(deps.require_permission("user:read")),
 ) -> Any:
     """
-    获取用户列表
+    获取用户列表（支持搜索和筛选）
     """
-    users = crud_user.get_multi(db, skip=skip, limit=limit)
-    return users
+    users, total = crud_user.get_multi_with_search(
+        db,
+        skip=skip,
+        limit=limit,
+        keyword=keyword,
+        role_id=role_id,
+        is_active=is_active
+    )
+
+    # 转换为字典格式以便序列化
+    users_data = []
+    for user in users:
+        user_dict = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "roles": [{"id": role.id, "name": role.name} for role in user.roles] if user.roles else []
+        }
+        users_data.append(user_dict)
+
+    return {
+        "data": users_data,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 @router.post("/", response_model=UserWithRoles)
@@ -79,6 +110,18 @@ def read_user_me(
     获取当前用户信息
     """
     return current_user
+
+
+@router.get("/statistics")
+def get_user_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.require_permission("user:read")),
+) -> Any:
+    """
+    获取用户统计信息
+    """
+    stats = crud_user.get_statistics(db)
+    return stats
 
 
 @router.get("/{user_id}", response_model=UserSchema)
@@ -219,3 +262,5 @@ def change_my_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
+
+

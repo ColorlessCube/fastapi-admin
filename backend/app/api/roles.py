@@ -1,8 +1,8 @@
 """
 角色管理 API
 """
-from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -15,18 +15,44 @@ from app.schemas.role import Role as RoleSchema, RoleCreate, RoleUpdate, RoleWit
 router = APIRouter()
 
 
-@router.get("/", response_model=List[RoleWithPermissions])
+@router.get("/")
 def read_roles(
     db: Session = Depends(get_db),
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    keyword: Optional[str] = Query(None, description="搜索关键词（角色名称、描述）"),
     current_user: User = Depends(deps.require_permission("role:read")),
 ) -> Any:
     """
-    获取角色列表
+    获取角色列表（支持搜索）
     """
-    roles = crud_role.get_multi(db, skip=skip, limit=limit)
-    return roles
+    roles, total = crud_role.get_multi_with_search(
+        db,
+        skip=skip,
+        limit=limit,
+        keyword=keyword
+    )
+
+    # 转换为字典格式以便序列化
+    roles_data = []
+    for role in roles:
+        role_dict = {
+            "id": role.id,
+            "name": role.name,
+            "description": role.description,
+            "is_active": role.is_active,
+            "created_at": role.created_at,
+            "updated_at": role.updated_at,
+            "permissions": [{"id": perm.id, "name": perm.name, "code": perm.code} for perm in role.permissions] if role.permissions else []
+        }
+        roles_data.append(role_dict)
+
+    return {
+        "data": roles_data,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 @router.post("/", response_model=RoleSchema)
@@ -47,6 +73,18 @@ def create_role(
         )
     role = crud_role.create(db, obj_in=role_in)
     return role
+
+
+@router.get("/statistics")
+def get_role_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.require_permission("role:read")),
+) -> Any:
+    """
+    获取角色统计信息
+    """
+    stats = crud_role.get_statistics(db)
+    return stats
 
 
 @router.get("/{role_id}", response_model=RoleWithPermissions)
@@ -116,6 +154,36 @@ def delete_role(
     return {"message": "Role deleted successfully"}
 
 
+@router.get("/{role_id}/permissions")
+def get_role_permissions(
+    *,
+    db: Session = Depends(get_db),
+    role_id: int,
+    current_user: User = Depends(deps.require_permission("role:read")),
+) -> Any:
+    """
+    获取角色的权限列表
+    """
+    role = crud_role.get(db, id=role_id)
+    if not role:
+        raise HTTPException(
+            status_code=404,
+            detail="Role not found",
+        )
+
+    permissions = [
+        {
+            "id": perm.id,
+            "name": perm.name,
+            "code": perm.code,
+            "description": perm.description
+        }
+        for perm in role.permissions
+    ]
+
+    return permissions
+
+
 @router.post("/{role_id}/permissions/{permission_id}")
 def assign_permission_to_role(
     *,
@@ -133,18 +201,18 @@ def assign_permission_to_role(
             status_code=404,
             detail="Role not found",
         )
-    
+
     permission = crud_permission.get(db, id=permission_id)
     if not permission:
         raise HTTPException(
             status_code=404,
             detail="Permission not found",
         )
-    
+
     if permission not in role.permissions:
         role.permissions.append(permission)
         db.commit()
-    
+
     return {"message": "Permission assigned to role successfully"}
 
 
@@ -215,3 +283,6 @@ def update_role_permissions(
     db.commit()
     
     return {"message": "Role permissions updated successfully"}
+
+
+

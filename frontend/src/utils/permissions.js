@@ -91,7 +91,8 @@ class PermissionManager {
         'users': ['user:read'],
         'roles': ['role:read'],
         'permissions': ['permission:read'],
-        'system-configs': ['system:config_read']
+        'system-configs': ['system:config_read'],
+        'notification-clients': ['notification:read']
       }
 
       const requiredPermissions = pagePermissions[page]
@@ -137,6 +138,14 @@ class PermissionManager {
         create: this.hasPermission('system:config_create'),
         update: this.hasPermission('system:config_update'),
         delete: this.hasPermission('system:config_delete')
+      },
+      'notification-clients': {
+        read: this.hasPermission('notification:read'),
+        create: this.hasPermission('notification:create'),
+        update: this.hasPermission('notification:update'),
+        delete: this.hasPermission('notification:delete'),
+        test: this.hasPermission('notification:test'),
+        send: this.hasPermission('notification:send')
       }
     }
 

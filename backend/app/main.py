@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import json
 
-from app.api import auth, users, roles, permissions, system_configs
+from app.api import auth, users, roles, permissions, system_configs, notification_clients
 from app.core.config import settings
 from app.core.database import create_tables
 from app.services.config_manager import config_manager
@@ -51,6 +51,7 @@ app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["u
 app.include_router(roles.router, prefix=f"{settings.API_V1_STR}/roles", tags=["roles"])
 app.include_router(permissions.router, prefix=f"{settings.API_V1_STR}/permissions", tags=["permissions"])
 app.include_router(system_configs.router, prefix=f"{settings.API_V1_STR}/system-configs", tags=["system-configs"])
+app.include_router(notification_clients.router, prefix=f"{settings.API_V1_STR}/notification-clients", tags=["notification-clients"])
 
 
 @app.on_event("startup")

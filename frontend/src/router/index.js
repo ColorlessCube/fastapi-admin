@@ -4,6 +4,7 @@ import Dashboard from '../views/Dashboard.vue'
 import Users from '../views/Users.vue'
 import Roles from '../views/Roles.vue'
 import SystemConfigs from '../views/SystemConfigs.vue'
+import NotificationClients from '../views/NotificationClients.vue'
 import Profile from '../views/Profile.vue'
 import permissionManager from '../utils/permissions'
 
@@ -36,6 +37,12 @@ const routes = [
     name: 'SystemConfigs',
     component: SystemConfigs,
     meta: { requiresAuth: true, requiredPermission: 'system:config_read' }
+  },
+  {
+    path: '/notification-clients',
+    name: 'NotificationClients',
+    component: NotificationClients,
+    meta: { requiresAuth: true, requiredPermission: 'notification:read' }
   },
   {
     path: '/profile',
